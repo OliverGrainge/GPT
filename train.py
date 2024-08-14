@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 import utils
 from config import ModelConfig, TraningConfig, DatasetConfig
-from dataloader import DatasetSmall, ValDataset
+from dataset import DatasetSmall, ValDataset
 from model import GPT
 
 from torch.utils.data import DataLoader, DistributedSampler

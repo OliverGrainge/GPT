@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass 
 class DatasetConfig: 
-    root: str="dataloader" # where to find the data 
+    root: str="/Users/olivergrainge/Documents/github/GPT/raw_data" # where to find the data 
     train_small_name: str="input.txt" # name of the small training dataset 
     train_large_name: str="edu_fineweb10B" # name of the large training dataset 
     val_name: str="hellaswag" # name of the evaluation dataset 

@@ -9,17 +9,31 @@ Will save shards to the local directory "edu_fineweb10B".
 
 import multiprocessing as mp
 import os
+import subprocess
 
 import numpy as np
 import tiktoken
 from datasets import load_dataset  # pip install datasets
 from tqdm import tqdm  # pip install tqdm
-from ..config import DatasetConfig
+from config import DatasetConfig
 
 dataset_config = DatasetConfig()
 
+# load the small training dataset 
+url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+command = ["wget", "-P", dataset_config.root, url]
+result = subprocess.run(command, check=True)
+
+
+# Load the validation dataset
+dataset = load_dataset("hellaswag")
+# Save the dataset to a local directory
+dataset.save_to_disk(os.path.join(dataset_config.root, "hellaswag/"))
+
+
+
 # ------------------------------------------
-local_dir = "edu_fineweb10B"
+local_dir = os.path.join(dataset_config.root, "edu_fineweb10B")
 remote_name = "sample-10BT"
 shard_size = int(1e8)  # 100M tokens per shard, total of 100 shards
 
@@ -96,7 +110,3 @@ with mp.Pool(nprocs) as pool:
         write_datafile(os.path.join(dataset_config.root, filename), all_tokens_np[:token_count])
 
 
-# Load the validation dataset
-dataset = load_dataset("hellaswag")
-# Save the dataset to a local directory
-dataset.save_to_disk(os.path.join(dataset_config.root, "hellaswag/"))
