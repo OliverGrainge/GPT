@@ -3,4 +3,5 @@
 *.json
 *.arrow
 *.txt
-
+*.pyc
+*__pycache__/*
