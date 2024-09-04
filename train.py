@@ -101,10 +101,11 @@ def samples(training_state, model, text, n_samples=5, max_length=30, logger=None
 def validate(training_state, model, val_dl, logger=None):
     model.eval()
     correct, total = 0, 0
+    device = utils.detect_device()
     for x, y, l in tqdm(val_dl):
         with torch.no_grad():
-            x = x[:, :-1]
-            targets = x[:, 1:]
+            x = x[:, :-1].to(device)
+            targets = x[:, 1:].to(device)
             logits, _ = model(x)
             log_probs = logits.log_softmax(dim=2)
             selected_log_probs = torch.gather(

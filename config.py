@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass 
 class DatasetConfig: 
-    root: str="/Users/olivergrainge/Documents/github/GPT/raw_data" # where to find the data 
+    root: str="/mnt/datasets_drive/nlp" # where to find the data 
     train_small_name: str="input.txt" # name of the small training dataset 
     train_large_name: str="edu_fineweb10B" # name of the large training dataset 
     val_name: str="hellaswag" # name of the evaluation dataset 
@@ -25,7 +25,7 @@ class TraningConfig:
     samples: bool = True # whether to sample output text on each training pass
     compile: bool = False # whether to use torch.compile
     lr: float = 6e-4 # maximum learning rate
-    steps_per_pass: int = 5 # number of training steps before validation
+    steps_per_pass: int = 1000 # number of training steps before validation
     max_steps: int = 1000 # max number of total training steps required 
     warmup_steps: int=10 # number of lr warmup steps
     min_lr_mult: float = 0.1 # minimum lr value 
