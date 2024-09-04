@@ -26,7 +26,7 @@ class TraningConfig:
     compile: bool = False # whether to use torch.compile
     lr: float = 6e-4 # maximum learning rate
     steps_per_pass: int = 1000 # number of training steps before validation
-    max_steps: int = 1000 # max number of total training steps required 
+    max_steps: int = 100000 # max number of total training steps required 
     warmup_steps: int=10 # number of lr warmup steps
     min_lr_mult: float = 0.1 # minimum lr value 
     beta1: float = 0.9 # beta for adam optimizer

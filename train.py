@@ -40,7 +40,7 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
     for batch_n in range(train_config.steps_per_pass):
         st = time.time()
         optimizer.zero_grad()
-        loss_accum = 0
+        loss_accum = torch.tensor([0.])
         for mini_batch_n, batch in enumerate(dataloader):
             if mini_batch_n == n_grad_accum:
                 break
@@ -54,7 +54,7 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
                 logits, loss = model(x, y)
             loss = loss / n_grad_accum
             loss.backward()
-            loss_accum += loss.detach()
+            loss_accum += loss.detach().cpu()
 
         optimizer.step()
         et = time.time()
@@ -214,10 +214,12 @@ def train(rank, train_config, model, train_dl, val_dl, world_size=None):
         if train_config.samples and rank == 0:
             samples(training_state, model, "I thee like,", logger=logger)
         if rank == 0:
-            val_score = validate(training_state, model, val_dl, logger=logger)
+            continue
+            #val_score = validate(training_state, model, val_dl, logger=logger)
         lr = get_lr(train_config, training_pass)
         if checkpointer is not None and rank == 0: 
-            checkpointer.check(model, val_score)
+            checkpointer.check(model, 0.5)
+            #checkpointer.check(model, val_score)
         utils.update_lr(lr, optimizer)
 
     if train_config.dist: 
