@@ -8,17 +8,9 @@ class DatasetConfig:
     train_large_name: str="edu_fineweb10B" # name of the large training dataset 
     val_name: str="hellaswag" # name of the evaluation dataset 
 
-# for GPT-medium
-@dataclass
-class ModelConfig:
-    block_size: int = 1024  # max sequence length stays the same
-    vocab_size: int = 50257  # stays the same
-    n_layer: int = 24  # GPT-2 Medium has 24 layers
-    n_head: int = 16  # GPT-2 Medium has 16 attention heads
-    n_embd: int = 1024  # GPT-2 Medium has an embedding dimension of 1024
 
 
-"""
+
 # for GPT-small
 @dataclass
 class ModelConfig:
@@ -29,6 +21,17 @@ class ModelConfig:
     n_layer: int = 12  # number of layers
     n_head: int = 12  # number of heads
     n_embd: int = 768  # embedding dimension
+
+
+"""
+# for GPT-medium
+@dataclass
+class ModelConfig:
+    block_size: int = 1024  # max sequence length stays the same
+    vocab_size: int = 50257  # stays the same
+    n_layer: int = 24  # GPT-2 Medium has 24 layers
+    n_head: int = 16  # GPT-2 Medium has 16 attention heads
+    n_embd: int = 1024  # GPT-2 Medium has an embedding dimension of 1024
 """
 
 """
@@ -46,7 +49,7 @@ class ModelConfig:
 @dataclass
 class TrainingConfig:
     dist: bool = True # whether to use ddp distributed training
-    num_workers: int = 6
+    num_workers: int = 16
     samples: bool = True # whether to sample output text on each training pass
     compile: bool = False # whether to use torch.compile
     lr: float = 0.001 #6e-4 # maximum learning rate
@@ -59,6 +62,6 @@ class TrainingConfig:
     weight_decay: float = 0.01 # weight decay for 2d weights
     token_batch_size: int = 2 * 10 * 32 # number of tokens required per weight update
     mini_batch_size: int = 10 # mini batch size
-    sequence_length: int = 32 # sequence or context length 
+    sequence_length: int = 256 # sequence or context length 
     logging_dir: str="logs" # where to view the training logs 
     checkpoint_dir: str="checkpoints"

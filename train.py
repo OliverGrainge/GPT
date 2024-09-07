@@ -17,11 +17,13 @@ from config import ModelConfig, TrainingConfig, DatasetConfig
 from dataset import DatasetSmall, DatasetLarge, ValDataset
 from model import GPT
 
+torch.set_float32_matmul_precision('high')
+
 class GPTLightning(LightningModule):
     def __init__(self, model_config, train_config, pretrained=False):
         super(GPTLightning, self).__init__()
         if pretrained: 
-            self.model = GPT.from_pretrained("gpt2-medium")
+            self.model = GPT.from_pretrained("gpt2")
         else:
             self.model = GPT(model_config)
         self.train_config = train_config
@@ -47,7 +49,7 @@ class GPTLightning(LightningModule):
         likelihoods = []
         for idx, (logi, lens) in enumerate(zip(logits, lengths)):
             log_probs = F.log_softmax(logi, dim=-1)
-            ending_log_probs = log_probs[torch.arange(lens[1]-lens[0]), inputs[idx][lens[0]:lens[1]]]
+            ending_log_probs = log_probs[torch.arange(lens[0], lens[1]-1), inputs[idx][lens[0]+1:lens[1]]]
             log_likelihood = ending_log_probs.sum().item()
             likelihoods.append(log_likelihood)
         likelihoods = torch.tensor(likelihoods).reshape(-1, 4).to(logits.device)
@@ -89,10 +91,10 @@ class GPTDataModule(LightningDataModule):
         self.train_config = train_config
     
     def train_dataloader(self):
-        return DataLoader(self.train_ds, batch_size=1, collate_fn=self.train_ds.collate_fn, num_workers=self.train_config.num_workers)
+        return DataLoader(self.train_ds, batch_size=self.train_config.mini_batch_size, collate_fn=self.train_ds.collate_fn, num_workers=self.train_config.num_workers)
     
     def val_dataloader(self):
-        return DataLoader(self.val_ds, batch_size=2, collate_fn=self.val_ds.collate_fn, num_workers=self.train_config.num_workers)
+        return DataLoader(self.val_ds, batch_size=self.train_config.mini_batch_size, collate_fn=self.val_ds.collate_fn, num_workers=self.train_config.num_workers)
 
 
 def main():
@@ -119,14 +121,15 @@ def main():
     # Initialize trainer
     trainer = Trainer(
         max_epochs=train_config.max_steps,
-        devices=1, #torch.cuda.device_count(),  # Automatically use all available GPUs
+        devices=1,
+        accumulate_grad_batches=4, #torch.cuda.device_count(),  # Automatically use all available GPUs
         #strategy="ddp",  # Use DDP for multi-GPU support
         accelerator="gpu",  # Use GPU acceleration
         precision=16, #if train_config.use_mixed_precision else 32,  # Mixed precision
         callbacks=[checkpoint_callback],
         #gradient_clip_val=train_config.gradient_clip_val,  # Gradient clipping if needed
         limit_train_batches=10,
-        #limit_val_batches=500,
+        limit_val_batches=100
     )
     print(" ")
     print(" ")
