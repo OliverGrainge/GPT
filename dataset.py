@@ -207,7 +207,7 @@ if __name__ == "__main__":
     dataset = ValDataset(DatasetConfig(), TrainingConfig())
     x, y, z = dataset.__getitem__(3)
     print(type(x), type(y), type(z))
-    #dl = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn)
-    #for batch in dl: 
-    #    tok, lab, lengths = batch
-    #    print(tok.shape, lab.shape, batch.shape)
+    dl = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn)
+    for batch in dl: 
+        tok, lab, lengths = batch
+        print(tok.shape, lab.shape, batch.shape)
