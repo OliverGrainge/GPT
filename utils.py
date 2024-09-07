@@ -10,6 +10,7 @@ class TrainingState:
     step: int = 0
     tokens: int = 0
     validate_count: int = 0
+    epoch: int=0
 
 
 def pipeline(model, x, max_length=30, topk=50):

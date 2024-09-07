@@ -17,14 +17,14 @@ from tqdm import tqdm
 
 import utils
 from config import ModelConfig, TraningConfig, DatasetConfig
-from dataset import DatasetSmall, ValDataset
+from dataset import DatasetSmall, DatasetLarge, ValDataset
 from model import GPT
 
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-def train_step(rank, training_state, train_config, model, optimizer, dataloader,logger=None, world_size=None):
+def train_step(rank, training_state, train_config, model, optimizer, dataloader_iter, dataloader, logger=None, world_size=None, training_pass=None):
     if world_size is not None: 
         device = torch.device(f"cuda:{rank}")
     else: 
@@ -36,14 +36,26 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
     n_grad_accum = utils.calculate_n_mini_batches(train_config)
     if world_size is not None: 
         n_grad_accum = max(n_grad_accum // world_size, 1)
-    dataloader = iter(dataloader)
+
+    # Set the epoch for the DistributedSampler (if using distributed training)
+    if world_size is not None and isinstance(dataloader_iter.sampler, DistributedSampler):
+        dataloader_iter.sampler.set_epoch(training_pass)
+
     for batch_n in range(train_config.steps_per_pass):
         st = time.time()
         optimizer.zero_grad()
         loss_accum = torch.tensor([0.])
-        for mini_batch_n, batch in enumerate(dataloader):
-            if mini_batch_n == n_grad_accum:
-                break
+        for mini_batch_n in range(n_grad_accum):
+            try:
+                # Use next to get the next batch from the iterator
+                batch = next(dataloader_iter)
+            except StopIteration:
+                # If the iterator is exhausted, reset it
+                print("======   Restarting dataset ======")
+                training_state.epoch += 1
+                dataloader_iter = iter(dataloader)  # Re-create the iterator
+                batch = next(dataloader_iter)  # Fetch the first batch again
+
             x, y = batch
             x, y = x.to(device), y.to(device)
 
@@ -52,6 +64,8 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
                     logits, loss = model(x, y)
             else:
                 logits, loss = model(x, y)
+            assert not torch.isnan(loss).any(), "NaN found in loss"
+            assert not torch.isinf(loss).any(), "Inf found in loss"
             loss = loss / n_grad_accum
             loss.backward()
             loss_accum += loss.detach().cpu()
@@ -59,7 +73,6 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
         optimizer.step()
         et = time.time()
         
-        # Calculate the number of tokens processed
         num_tokens = (
             train_config.mini_batch_size * train_config.sequence_length * n_grad_accum
         )
@@ -67,7 +80,6 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
             num_tokens = num_tokens * world_size
         training_state.tokens += num_tokens 
         training_state.step += 1 
-        # Calculate throughput as tokens per second
         throughput = num_tokens / (et - st)
         throughputs.append(throughput)
         if logger is not None and rank == 0: 
@@ -76,7 +88,9 @@ def train_step(rank, training_state, train_config, model, optimizer, dataloader,
         print(
             f"| Batch: {batch_n:03d} | loss: {loss_accum.item():.4f} | throughput {np.mean(throughputs[-10:]):.3f}"
         )
-    return dataloader
+
+    return dataloader_iter 
+
 
 
 def samples(training_state, model, text, n_samples=5, max_length=30, logger=None):
@@ -177,17 +191,24 @@ def get_optimizer(train_config, model):
 
 
 def train(rank, train_config, model, train_dl, val_dl, world_size=None):
+    print("entered training loops with rank: ", rank)
     if train_config.dist: 
+        print("starting dist setup")
         assert rank is not None 
         assert world_size is not None
-        myddp.setup(rank, world_size)
+        print("setting up ddp")
+        myddp.setup_ddp(rank, world_size)
+        print("Finishing setting up ddp")
         device = torch.device(f"cuda:{rank}")
         model.to(device)
+        print("Running DDP model: ", rank)
         model = DDP(model, device_ids=[rank])
+        print("Finished DDP mdoel: ", rank)
         optimizer = get_optimizer(train_config, model)
-
+        print("starting loader: ", rank)
         train_sampler = DistributedSampler(train_dl.dataset, num_replicas=world_size, rank=rank)
         train_dl = DataLoader(train_dl.dataset, batch_size=1, collate_fn=train_dl.dataset.collate_fn, sampler=train_sampler)
+        print("finishing loader: ", rank)
     else: 
         device = utils.detect_device()
         model.to(device)
@@ -201,26 +222,35 @@ def train(rank, train_config, model, train_dl, val_dl, world_size=None):
         checkpointer = None
 
     training_state = utils.TrainingState()
+    dataloader_iter = iter(train_dl)  # Create an iterator from the DataLoader
     for training_pass in range(train_config.max_steps // train_config.steps_per_pass):
-        train_dl = train_step(
+        dataloader_iter = train_step(
             rank,
             training_state,
             train_config,
             model,
             optimizer,
+            dataloader_iter,  # Pass the iterator instead of DataLoader
             train_dl,
             logger=logger,
+            training_pass=training_pass
         )
+        print("finished training pass")
+
+        
         if train_config.samples and rank == 0:
             samples(training_state, model, "I thee like,", logger=logger)
+        """
         if rank == 0:
             continue
             #val_score = validate(training_state, model, val_dl, logger=logger)
+        
         lr = get_lr(train_config, training_pass)
         if checkpointer is not None and rank == 0: 
             checkpointer.check(model, 0.5)
             #checkpointer.check(model, val_score)
         utils.update_lr(lr, optimizer)
+        """
 
     if train_config.dist: 
         myddp.cleanup()
@@ -228,20 +258,25 @@ def train(rank, train_config, model, train_dl, val_dl, world_size=None):
 
 
 if __name__ == "__main__":
-    world_size = torch.cuda.device_count()
+    print("======================================== STARTING SCRIPT")
     train_config = TraningConfig()
     model_config = ModelConfig()
     dataset_config = DatasetConfig()
 
     train_ds = DatasetSmall(dataset_config, train_config)
-    train_dl = DataLoader(train_ds, batch_size=1, collate_fn=train_ds.collate_fn)
+    train_dl = DataLoader(train_ds, batch_size=train_config.mini_batch_size, collate_fn=train_ds.collate_fn, num_workers=train_config.num_workers)
 
     val_ds = ValDataset(dataset_config, model_config)
-    val_dl = DataLoader(val_ds, batch_size=2, collate_fn=val_ds.collate_fn)
-
+    val_dl = DataLoader(val_ds, batch_size=train_config.mini_batch_size, collate_fn=val_ds.collate_fn, num_workers=train_config.num_workers)
     model = GPT(model_config)
+
+    print("======================================== Produced Model")
     
     if train_config.dist: 
+        world_size = torch.cuda.device_count()
+        print("-")
+        torch.multiprocessing.set_start_method('spawn', force=True)
+        print("running with worlds size: ", world_size)
         torch.multiprocessing.spawn(train,
                             args=(train_config, model, train_dl, val_dl, world_size),
                             nprocs=world_size,

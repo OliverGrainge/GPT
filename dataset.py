@@ -4,7 +4,10 @@ import numpy as np
 import tiktoken
 import torch
 from datasets import load_from_disk
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torch.nn.utils.rnn import pad_sequence
+import itertools
+
 
 
 def load_tokens(filename):
@@ -16,24 +19,23 @@ def load_tokens(filename):
 
 def get_dataset_length(data_directory, split):
     shards = os.listdir(data_directory)
-    shards = [s for s in shards if split in s]
+    shards = [os.path.join(data_directory, s) for s in shards if split in s]
     lengths = [len(load_tokens(s)) for s in shards]
     return sum(lengths)
 
 
 class DatasetLarge(Dataset):
-    def __init__(self, data_config, train_config, split):
+    def __init__(self, data_config, train_config, split="train"):
         super().__init__()
         self.B = train_config.mini_batch_size
         self.T = train_config.sequence_length
         assert split in {"train", "val"}
 
         # get the shard filenames
-        data_root = "edu_fineweb10B"
-        self.dataset_length = get_dataset_length(data_root)
+        data_root = os.path.join(data_config.root, "edu_fineweb10B")
+        self.dataset_length = 9853989344 # I have hardcoded for speed: otherwise: get_dataset_length(data_root, split)
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
-        shards = sorted(shards)
         shards = [os.path.join(data_root, s) for s in shards]
         self.shards = shards
         assert len(shards) > 0, f"no shards found for split {split}"
@@ -44,23 +46,39 @@ class DatasetLarge(Dataset):
         self.current_shard = 0
         self.current_position = 0
         self.tokens = load_tokens(self.shards[self.current_shard])
+        self.pos = 0
 
     def __len__(self):
-        return self.dataset_length // (self.B * self.T)
+        return (self.dataset_length // (self.B * self.T)) - len(self.shards) - 1
 
     def __getitem__(self, idx):
         B, T = self.B, self.T
-        buf = self.tokens[: idx * B * T + 1]
-        x = (buf[:-1]).view(B, T)  # inputs
-        y = (buf[1:]).view(B, T)  # targets
-        # advance the position in the tensor
+        
+        # Calculate start and end indices for the buffer slice
+        start_idx = self.current_position
+        end_idx = self.current_position + (B * T) + 1
+        
+        # Take the buffer slice
+        buf = self.tokens[start_idx:end_idx]
+        
+        # Create input (x) and target (y) tensors
+        x = buf[:-1].view(B, T)  # Inputs
+        y = buf[1:].view(B, T)   # Targets
+        
+        # Advance position and load next shard if needed
         self.current_position += B * T
-        # if loading the next batch would be out of bounds, advance to next shard
-        if self.current_position + (B * T + 1) > len(self.tokens):
+        if self.current_position + (B * T + 1) > (len(self.tokens) - 1):
             self.current_shard = (self.current_shard + 1) % len(self.shards)
             self.tokens = load_tokens(self.shards[self.current_shard])
             self.current_position = 0
+
         return x, y
+
+
+
+    def collate_fn(self, batch):
+        inputs, targets = zip(*batch)
+        return torch.vstack(inputs), torch.vstack(targets)
 
 
 class DatasetSmall(Dataset):
@@ -76,7 +94,7 @@ class DatasetSmall(Dataset):
         self.tokens = torch.tensor(self.tokens, dtype=torch.long).flatten()
 
     def __len__(self):
-        return len(self.tokens) // (self.batch_size * self.sequence_length)
+        return (len(self.tokens) // (self.batch_size * self.sequence_length)) 
 
     def __getitem__(self, idx):
         buf = self.tokens[
@@ -114,20 +132,41 @@ class ValDataset(Dataset):
         tokens = [(self.enc.encode(t[0]), self.enc.encode(" " + t[1])) for t in texts]
         lengths = [(len(t[0]), len(t[0]) + len(t[1])) for t in tokens]
         tokens = [t[0] + t[1] for t in tokens]
-        max_length = max([len(tok) for tok in tokens])
-        padded_tokens = []
-        for tok in tokens:
-            if len(tok) < max_length:
-                p_tok = tok + [self.pad_token for _ in range(max_length - len(tok))]
-            else:
-                p_tok = tok
-            padded_tokens.append(p_tok)
         return (
-            torch.tensor(padded_tokens, dtype=torch.long),
-            torch.tensor(label),
-            torch.tensor(lengths, dtype=torch.long),
+            tokens,
+            label,
+            lengths,
         )
 
+
+    def collate_fn(self, batch):
+        # Separate the tokens, labels, and lengths
+        tokens, labels, lengths = zip(*batch)
+        tokens = list(itertools.chain(*tokens))
+        labels = list(itertools.chain(*labels))
+        lengths = list(itertools.chain(*lengths))
+
+        # Find the max token length in the batch
+        max_length = max([len(tok) for tok in tokens])
+
+        # Pad the tokens to the max length
+        padded_tokens = torch.full((len(tokens), max_length), self.pad_token, dtype=torch.long)
+        for i, tok in enumerate(tokens):
+            padded_tokens[i, :len(tok)] = torch.tensor(tok, dtype=torch.long)
+
+        # Convert labels to a tensor
+        labels = torch.tensor(labels, dtype=torch.long)
+
+        # Convert lengths to tensors for the model if needed
+        lengths = torch.tensor(lengths, dtype=torch.long)
+
+        # Return the padded tokens, labels, and lengths
+        return padded_tokens, labels, lengths
+
+
+
+
+    """
     def collate_fn(self, batch):
         x, y, l = zip(*batch)
         max_length = max([t.shape[1] for t in x])
@@ -151,3 +190,24 @@ class ValDataset(Dataset):
             torch.hstack(y).type(torch.long),
             torch.hstack(l).type(torch.long),
         )
+    """
+if __name__ == "__main__":
+    from config import TrainingConfig, DatasetConfig
+
+    """
+    dataset = DatasetLarge(DatasetConfig(), TrainingConfig())
+    dataset_length = dataset.__len__()
+    print("length of dataset", dataset_length)
+    batch = dataset.__getitem__(5)
+    print("got batch")
+    dl = DataLoader(dataset, batch_size=10, collate_fn=dataset.collate_fn)
+    for batch in dl: 
+        continue
+    """
+    dataset = ValDataset(DatasetConfig(), TrainingConfig())
+    x, y, z = dataset.__getitem__(3)
+    print(type(x), type(y), type(z))
+    #dl = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn)
+    #for batch in dl: 
+    #    tok, lab, lengths = batch
+    #    print(tok.shape, lab.shape, batch.shape)
