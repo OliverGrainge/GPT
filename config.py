@@ -3,11 +3,23 @@ from dataclasses import dataclass
 
 @dataclass 
 class DatasetConfig: 
-    root: str="/scratch/oeg1n18/datasets/nlp" # where to find the data 
+    root: str="/home/oliver/datasets_drive/nlp"          #"/scratch/oeg1n18/datasets/nlp" # where to find the data 
     train_small_name: str="input.txt" # name of the small training dataset 
     train_large_name: str="edu_fineweb10B" # name of the large training dataset 
     val_name: str="hellaswag" # name of the evaluation dataset 
 
+# for GPT-medium
+@dataclass
+class ModelConfig:
+    block_size: int = 1024  # max sequence length stays the same
+    vocab_size: int = 50257  # stays the same
+    n_layer: int = 24  # GPT-2 Medium has 24 layers
+    n_head: int = 16  # GPT-2 Medium has 16 attention heads
+    n_embd: int = 1024  # GPT-2 Medium has an embedding dimension of 1024
+
+
+"""
+# for GPT-small
 @dataclass
 class ModelConfig:
     block_size: int = 1024  # max sequence length
@@ -17,6 +29,18 @@ class ModelConfig:
     n_layer: int = 12  # number of layers
     n_head: int = 12  # number of heads
     n_embd: int = 768  # embedding dimension
+"""
+
+"""
+# for GPT-Large
+@dataclass
+class ModelConfig:
+    block_size: int = 1024  # max sequence length stays the same
+    vocab_size: int = 50257  # stays the same
+    n_layer: int = 36  # GPT-2 Large has 36 layers
+    n_head: int = 20  # GPT-2 Large has 20 attention heads
+    n_embd: int = 1280  # GPT-2 Large has an embedding dimension of 1280
+"""
 
 
 @dataclass

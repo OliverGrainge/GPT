@@ -143,7 +143,7 @@ class ValDataset(Dataset):
         # Separate the tokens, labels, and lengths
         tokens, labels, lengths = zip(*batch)
         tokens = list(itertools.chain(*tokens))
-        labels = list(itertools.chain(*labels))
+        labels = list(labels)
         lengths = list(itertools.chain(*lengths))
 
         # Find the max token length in the batch
@@ -163,34 +163,6 @@ class ValDataset(Dataset):
         # Return the padded tokens, labels, and lengths
         return padded_tokens, labels, lengths
 
-
-
-
-    """
-    def collate_fn(self, batch):
-        x, y, l = zip(*batch)
-        max_length = max([t.shape[1] for t in x])
-        padded_tokens = []
-        for tok in x:
-            if tok.shape[1] < max_length:
-                tok_pad = torch.cat(
-                    (
-                        tok,
-                        torch.ones(tok.shape[0], max_length - tok.shape[1])
-                        * self.pad_token,
-                    ),
-                    dim=1,
-                )
-                padded_tokens.append(tok_pad)
-            else:
-                padded_tokens.append(tok)
-
-        return (
-            torch.vstack(padded_tokens).type(torch.long),
-            torch.hstack(y).type(torch.long),
-            torch.hstack(l).type(torch.long),
-        )
-    """
 if __name__ == "__main__":
     from config import TrainingConfig, DatasetConfig
 
@@ -207,7 +179,7 @@ if __name__ == "__main__":
     dataset = ValDataset(DatasetConfig(), TrainingConfig())
     x, y, z = dataset.__getitem__(3)
     print(type(x), type(y), type(z))
-    dl = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn)
+    dl = DataLoader(dataset, batch_size=5, collate_fn=dataset.collate_fn)
     for batch in dl: 
         tok, lab, lengths = batch
-        print(tok.shape, lab.shape, batch.shape)
+        print(tok.shape, lab.shape, lengths.shape)
