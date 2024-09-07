@@ -56,7 +56,7 @@ class GPTLightning(LightningModule):
         predictions = likelihoods.argmax(dim=1)
         correct = (predictions == labels).sum()
         score = correct / len(predictions)
-        self.log("score", score, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("val_score", score, on_step=True, on_epoch=True, prog_bar=True)
         return score
 
 
@@ -86,7 +86,7 @@ class GPTLightning(LightningModule):
 class GPTDataModule(LightningDataModule):
     def __init__(self, dataset_config, train_config):
         super().__init__()
-        self.train_ds = DatasetSmall(dataset_config, train_config)
+        self.train_ds = DatasetLarge(dataset_config, train_config)
         self.val_ds = ValDataset(dataset_config, ModelConfig())
         self.train_config = train_config
     
@@ -118,28 +118,22 @@ def main():
         save_last=True                 # Save the last checkpoint as well
     )
 
+    n_batch_accum = int(max(train_config.token_batch_size // (train_config.mini_batch_size * train_config.sequence_length), 1))
+    max_epochs = int(max((train_config.max_training_tokens // data_module.train_ds.dataset_length), 1))
+    val_freq = data_module.train_ds.dataset_length / train_config.tokens_per_validation
     # Initialize trainer
     trainer = Trainer(
-        max_epochs=train_config.max_steps,
-        devices=1,
-        accumulate_grad_batches=4, #torch.cuda.device_count(),  # Automatically use all available GPUs
-        #strategy="ddp",  # Use DDP for multi-GPU support
+        max_epochs=max_epochs,
+        accumulate_grad_batches=n_batch_accum, 
+        strategy="auto",  # Use DDP for multi-GPU support
         accelerator="gpu",  # Use GPU acceleration
-        precision=16, #if train_config.use_mixed_precision else 32,  # Mixed precision
+        precision=16, 
+        devices = 1 if train_config.dist == False else torch.cuda.device_count(),
         callbacks=[checkpoint_callback],
-        #gradient_clip_val=train_config.gradient_clip_val,  # Gradient clipping if needed
-        limit_train_batches=10,
-        limit_val_batches=100
     )
-    print(" ")
-    print(" ")
-    print(" ")
-    model.sample_text("GPT models are good at ")
-    print(" ")
-    print(" ")
-    print(" ")
-    trainer.validate(model, datamodule=data_module)
-    #trainer.fit(model, datamodule=data_module)
+
+
+    trainer.fit(model, datamodule=data_module)
 
 if __name__ == "__main__":
     main()

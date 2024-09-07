@@ -92,6 +92,7 @@ class DatasetSmall(Dataset):
             text = f.read()
         self.tokens = enc.encode(text)
         self.tokens = torch.tensor(self.tokens, dtype=torch.long).flatten()
+        self.dataset_length = len(self.tokens)
 
     def __len__(self):
         return (len(self.tokens) // (self.batch_size * self.sequence_length)) 

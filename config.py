@@ -48,20 +48,23 @@ class ModelConfig:
 
 @dataclass
 class TrainingConfig:
-    dist: bool = True # whether to use ddp distributed training
+    dist: bool = False # whether to use ddp distributed training
     num_workers: int = 16
     samples: bool = True # whether to sample output text on each training pass
     compile: bool = False # whether to use torch.compile
-    lr: float = 0.001 #6e-4 # maximum learning rate
-    steps_per_pass: int = 10 # number of training steps before validation
-    max_steps: int = 100000 # max number of total training steps required 
+    lr: float = 6e-4 #6e-4 # maximum learning rate
+    
     warmup_steps: int=10 # number of lr warmup steps
     min_lr_mult: float = 0.1 # minimum lr value 
     beta1: float = 0.9 # beta for adam optimizer
     beta2: float = 0.95 # beta2 for adam optimzier
     weight_decay: float = 0.01 # weight decay for 2d weights
-    token_batch_size: int = 2 * 10 * 32 # number of tokens required per weight update
-    mini_batch_size: int = 10 # mini batch size
+
+    max_training_tokens: int = 1e10 # max number of total training steps required
+    tokens_per_validation: int = 100000 # number of tokens before validation 
+    token_batch_size: int = 2 * 2 * 2456 # number of tokens required per weight update
+    mini_batch_size: int = 2 # mini batch size
     sequence_length: int = 256 # sequence or context length 
+
     logging_dir: str="logs" # where to view the training logs 
     checkpoint_dir: str="checkpoints"
