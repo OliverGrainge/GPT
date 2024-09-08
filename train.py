@@ -130,6 +130,8 @@ def main():
         precision=16, 
         devices = 1 if train_config.dist == False else torch.cuda.device_count(),
         callbacks=[checkpoint_callback],
+
+        limit_train_batches=10000,
     )
 
 

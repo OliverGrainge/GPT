@@ -62,9 +62,9 @@ class TrainingConfig:
 
     max_training_tokens: int = 1e10 # max number of total training steps required
     tokens_per_validation: int = 100000 # number of tokens before validation 
-    token_batch_size: int = 2 * 2 * 2456 # number of tokens required per weight update
+    token_batch_size: int = 2 * 2 * 1024 # number of tokens required per weight update
     mini_batch_size: int = 2 # mini batch size
-    sequence_length: int = 256 # sequence or context length 
+    sequence_length: int = 1024 # sequence or context length 
 
     logging_dir: str="logs" # where to view the training logs 
     checkpoint_dir: str="checkpoints"
